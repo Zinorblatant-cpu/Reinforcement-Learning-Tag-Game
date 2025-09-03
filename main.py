@@ -74,15 +74,13 @@ def jogar_partida(time_end=15, treinar=True):
                 escolha = 2 if escolha == 1 else 1
                 invulneravel_ate = agora + tempo_invulneravel
 
-                if treinar:
-                    if escolha == 1:
-                        agent1.update([dx1, dy1], 1)
-                        agent2.update([dx2, dy2], -1)
-                    else:
-                        agent1.update([dx1, dy1], -1)
-                        agent2.update([dx2, dy2], 1)
-                    agent1.save()
-                    agent2.save()
+                # Atualiza recompensas sem destruir pesos
+                if escolha == 1:
+                    agent1.update([dx1, dy1], 1)  # quem ganhou recebe +1
+                    agent2.update([dx2, dy2], 0)  # quem perdeu recebe 0
+                else:
+                    agent1.update([dx1, dy1], 0)
+                    agent2.update([dx2, dy2], 1)
 
             # empurrar para não sobrepor
             overlap = bolinha_raio * 2 - player1_pos.distance_to(player2_pos)
@@ -106,6 +104,9 @@ def jogar_partida(time_end=15, treinar=True):
         if elapsed >= time_end:
             running = False
         dt = clock.tick(60) / 1000
+        
+    agent1.save()
+    agent2.save()
 
     return escolha  # retorna vencedor
 
