@@ -1,7 +1,7 @@
 import numpy as np
 import json
 
-class LinearAgent:
+class AggressiveAgent:
     def __init__(self, n_features, lr=0.01, save_file="aggressive_agent.json"):
         # Inicializa pesos beta aleatórios
         self.beta = np.random.randn(n_features + 1).tolist()
