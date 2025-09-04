@@ -6,7 +6,7 @@ from AggressiveAgent import AggressiveAgent
 
 # --- pygame setup ---
 gm.init()
-screen = gm.display.set_mode((1100, 600))
+screen = gm.display.set_mode((1200, 700))
 clock = gm.time.Clock()
 
 # --- Carregar imagem do mapa ---
@@ -160,7 +160,7 @@ def jogar_partida(time_end=15, treinar=True):
     return escolha
 
 # --- rodar múltiplas partidas ---
-num_partidas = 100
+num_partidas = 10
 vitorias_player1 = 0
 vitorias_player2 = 0
 
