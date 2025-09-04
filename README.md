@@ -1,4 +1,4 @@
-# 🎮 Pepega Pega: IAs Competindo em um Labirinto
+# 🎮 Pepega Pega: Reinforcement-Learning-Tag-Game
 
 A "tag" game where two AIs (intelligent agents) compete in a map with obstacles, learning to **chase** or **flee** based on reward feedback.
 
