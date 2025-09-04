@@ -6,29 +6,67 @@ from AggressiveAgent import AggressiveAgent
 
 # --- pygame setup ---
 gm.init()
-screen = gm.display.set_mode((1280, 720))
+screen = gm.display.set_mode((1100, 600))
 clock = gm.time.Clock()
 
-# --- configuração do jogo ---
-bolinha_raio = 40
-roda_raio = 50
+# --- Carregar imagem do mapa ---
+try:
+    map_image = gm.image.load("mapa.png").convert()
+except Exception as e:
+    print(f"Erro ao carregar imagem: {e}")
+    gm.quit()
+    exit()
+
+# Centralizar imagem
+offset_x = (screen.get_width() - map_image.get_width()) // 2
+offset_y = (screen.get_height() - map_image.get_height()) // 2
+
+# --- configurações ---
+bolinha_raio = 30
+roda_raio = 40
 
 # --- criar IAs ---
-agent1 = AggressiveAgent(n_features=2, lr=0.01)
+agent1 = AggressiveAgent(n_features=2, lr=0.001)
 agent1.load()
-agent2 = LinearAgent(n_features=2, lr=0.01)
+agent2 = LinearAgent(n_features=2, lr=0.001)
 agent2.load()
 
+# --- funções ---
 def limitar_posicao(pos, raio, screen):
-    """Garante que a bolinha fique dentro dos limites da tela."""
     pos.x = max(raio, min(screen.get_width() - raio, pos.x))
     pos.y = max(raio, min(screen.get_height() - raio, pos.y))
     return pos
 
+def colisao_imagem(pos, image, offset_x, offset_y):
+    x = int(pos.x - offset_x)
+    y = int(pos.y - offset_y)
+    if x < 0 or x >= image.get_width() or y < 0 or y >= image.get_height():
+        return True
+    pixel = image.get_at((x, y))
+    return pixel[0] < 128 and pixel[1] < 128 and pixel[2] < 128  # preto = parede
+
+# --- função principal ---
 def jogar_partida(time_end=15, treinar=True):
-    # --- inicialização ---
-    player1_pos = gm.Vector2(screen.get_width() / 3, screen.get_height() / 2)
-    player2_pos = gm.Vector2(2 * screen.get_width() / 3, screen.get_height() / 2)
+    # Tenta encontrar posições iniciais válidas (fora das paredes)
+    max_tentativas = 100
+    player1_pos = None
+    player2_pos = None
+
+    for _ in range(max_tentativas):
+        x = rd.randint(offset_x + bolinha_raio, offset_x + map_image.get_width() - bolinha_raio)
+        y = rd.randint(offset_y + bolinha_raio, offset_y + map_image.get_height() - bolinha_raio)
+        pos = gm.Vector2(x, y)
+
+        if not colisao_imagem(pos, map_image, offset_x, offset_y):
+            if player1_pos is None:
+                player1_pos = pos
+            elif player2_pos is None:
+                player2_pos = pos
+                break
+    else:
+        print("Não foi possível encontrar posições válidas. Usando posições padrão.")
+        player1_pos = gm.Vector2(200, 200)
+        player2_pos = gm.Vector2(700, 600)
 
     escolha = rd.choice([1, 2])
     tempo_invulneravel = 1000  # ms
@@ -44,53 +82,66 @@ def jogar_partida(time_end=15, treinar=True):
                 running = False
 
         # --- IA Player1 ---
-        if escolha == 1:  # player1 tem a roda → perseguir
-            dx1 = player2_pos.x - player1_pos.x
+        if escolha == 1:
+            dx1 = -(player2_pos.x - player1_pos.x)  # fugir
+            dy1 = -(player2_pos.y - player1_pos.y)
+        else:
+            dx1 = player2_pos.x - player1_pos.x   # perseguir
             dy1 = player2_pos.y - player1_pos.y
-        else:  # fugir
-            dx1 = player1_pos.x - player2_pos.x
-            dy1 = player1_pos.y - player2_pos.y
-        move1 = agent1.decide_action([dx1, dy1]) * 300 * dt
-        player1_pos += gm.Vector2(move1[0], move1[1])
+
+        action1 = agent1.decide_action([dx1, dy1])
+        move1 = gm.Vector2(action1[0], action1[1]) * 200 * dt
+        nova_pos1 = player1_pos + move1
+        if not colisao_imagem(nova_pos1, map_image, offset_x, offset_y):
+            player1_pos = nova_pos1
 
         # --- IA Player2 ---
-        if escolha == 2:  # player2 tem a roda → perseguir
+        if escolha == 2:
+            dx2 = -(player1_pos.x - player2_pos.x)
+            dy2 = -(player1_pos.y - player2_pos.y)
+        else:
             dx2 = player1_pos.x - player2_pos.x
             dy2 = player1_pos.y - player2_pos.y
-        else:  # fugir
-            dx2 = player2_pos.x - player1_pos.x
-            dy2 = player2_pos.y - player1_pos.y
-        move2 = agent2.decide_action([dx2, dy2]) * 300 * dt
-        player2_pos += gm.Vector2(move2[0], move2[1])
+
+        action2 = agent2.decide_action([dx2, dy2])
+        move2 = gm.Vector2(action2[0], action2[1]) * 200 * dt
+        nova_pos2 = player2_pos + move2
+        if not colisao_imagem(nova_pos2, map_image, offset_x, offset_y):
+            player2_pos = nova_pos2
 
         # --- limitar posições ---
         player1_pos = limitar_posicao(player1_pos, bolinha_raio, screen)
         player2_pos = limitar_posicao(player2_pos, bolinha_raio, screen)
 
-        # --- colisão e atualização de recompensas ---
+        # --- colisão entre jogadores ---
         if player1_pos.distance_to(player2_pos) <= bolinha_raio * 2:
             agora = gm.time.get_ticks()
             if agora > invulneravel_ate:
+                # Recalcular as direções ANTES de atualizar
+                dx1_atual = player2_pos.x - player1_pos.x
+                dy1_atual = player2_pos.y - player1_pos.y
+                dx2_atual = player1_pos.x - player2_pos.x
+                dy2_atual = player1_pos.y - player2_pos.y
+
                 escolha = 2 if escolha == 1 else 1
                 invulneravel_ate = agora + tempo_invulneravel
 
-                # Atualiza recompensas sem destruir pesos
                 if escolha == 1:
-                    agent1.update([dx1, dy1], 1)  # quem ganhou recebe +1
-                    agent2.update([dx2, dy2], 0)  # quem perdeu recebe 0
+                    agent1.update([dx1_atual, dy1_atual], 1)
+                    agent2.update([dx2_atual, dy2_atual], 0)
                 else:
-                    agent1.update([dx1, dy1], 0)
-                    agent2.update([dx2, dy2], 1)
+                    agent1.update([dx1_atual, dy1_atual], 0)
+                    agent2.update([dx2_atual, dy2_atual], 1)
 
-            # empurrar para não sobrepor
             overlap = bolinha_raio * 2 - player1_pos.distance_to(player2_pos)
             if player1_pos != player2_pos:
                 direction = (player1_pos - player2_pos).normalize()
                 player1_pos += direction * (overlap / 2)
                 player2_pos -= direction * (overlap / 2)
 
-        # --- desenhar jogadores e roda ---
+        # --- desenhar tudo ---
         screen.fill("white")
+        screen.blit(map_image, (offset_x, offset_y))
         gm.draw.circle(screen, "red", player1_pos, bolinha_raio)
         gm.draw.circle(screen, "blue", player2_pos, bolinha_raio)
         if escolha == 1:
@@ -99,16 +150,14 @@ def jogar_partida(time_end=15, treinar=True):
             gm.draw.circle(screen, "black", player2_pos, roda_raio, 5)
         gm.display.flip()
 
-        # --- atualizar tempo ---
         elapsed = time.time() - time_start
         if elapsed >= time_end:
             running = False
         dt = clock.tick(60) / 1000
-        
+
     agent1.save()
     agent2.save()
-
-    return escolha  # retorna vencedor
+    return escolha
 
 # --- rodar múltiplas partidas ---
 num_partidas = 100
@@ -116,7 +165,7 @@ vitorias_player1 = 0
 vitorias_player2 = 0
 
 for i in range(num_partidas):
-    vencedor = jogar_partida(time_end=5)  # partidas curtas
+    vencedor = jogar_partida(time_end=5)
     if vencedor == 1:
         vitorias_player1 += 1
     else:
